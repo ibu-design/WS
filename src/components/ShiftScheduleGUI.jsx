@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Calendar, Upload, Image as ImageIcon } from "lucide-react";
 import html2canvas from "html2canvas";
-import { QRCodeCanvas } from "qrcode.react"; // 👈 QRコード用を追加
+import { QRCodeCanvas } from "qrcode.react";
 
 import { parseCSV } from "../utils/csv";
 import { assignBreakTimes, assignDuties } from "../utils/schedule";
@@ -11,6 +11,7 @@ import ScheduleTable from "./ScheduleTable";
 import ShortageAlert from "./ShortageAlert";
 import Legend from "./Legend";
 import CommentsBox from "./CommentsBox";
+import { uploadToCloudinary } from "../utils/cloudinaryUpload";
 
 const ShiftScheduleGUI = () => {
   const [csvData, setCsvData] = useState(null);
@@ -21,7 +22,7 @@ const ShiftScheduleGUI = () => {
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [sortedStaffNames, setSortedStaffNames] = useState([]);
   const [minRequirements, setMinRequirements] = useState({});
-  const [imageUrl, setImageUrl] = useState(null); // 👈 QRコード用
+  const [imageUrl, setImageUrl] = useState(null); 
   const fileInputRef = useRef(null);
   const scheduleRef = useRef(null);
 
@@ -73,7 +74,7 @@ const ShiftScheduleGUI = () => {
     reader.readAsText(file);
   };
 
-  // スケジュール表を画像として保存
+  // 画像として保存
   const exportImage = () => {
     if (!scheduleRef.current) return;
     html2canvas(scheduleRef.current).then(canvas => {
@@ -84,24 +85,32 @@ const ShiftScheduleGUI = () => {
     });
   };
 
-  // スケジュール表をQRコードで表示
   const exportQR = () => {
     if (!scheduleRef.current) return;
-    html2canvas(scheduleRef.current, { scale: 0.5 }).then(canvas => {
-      const dataUrl = canvas.toDataURL("image/png");
-      setImageUrl(dataUrl); // QRに渡す
+
+    html2canvas(scheduleRef.current).then((canvas) => {
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+
+        try {
+          const url = await uploadToCloudinary(blob); // ✅ Cloudinaryにアップロード
+          setImageUrl(url); // ✅ これをQRコード化する
+          console.log("Uploaded URL:", url);
+        } catch (err) {
+          console.error("アップロード失敗", err);
+          alert("アップロードに失敗しました");
+        }
+      });
     });
   };
 
   return (
     <div style={{ padding: "20px", background: "#fff", borderRadius: "8px" }}>
-      {/* タイトル */}
       <h1 style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "16px", display: "flex", alignItems: "center" }}>
         <Calendar size={24} style={{ marginRight: "8px", color: "#2563eb" }} />
         ワークシフト編集システム
       </h1>
 
-      {/* 操作パネル */}
       <div style={{ marginBottom: "16px" }}>
         <label>日付: </label>
         <select value={selectedDate} onChange={e => setSelectedDate(e.target.value)}>
@@ -131,13 +140,9 @@ const ShiftScheduleGUI = () => {
         </button>
       </div>
 
-      {/* 凡例 */}
       <Legend roleColors={ROLE_COLORS} />
-
-      {/* 不足人員アラート */}
       <ShortageAlert schedule={schedule} minRequirements={minRequirements} />
 
-      {/* スケジュール表 */}
       <div ref={scheduleRef}>
         <ScheduleTable
           schedule={schedule}
@@ -145,11 +150,9 @@ const ShiftScheduleGUI = () => {
           activeDropdown={activeDropdown}
           setActiveDropdown={setActiveDropdown}
         />
-        {/* コメント欄 */}
         <CommentsBox comments={comments} setComments={setComments} />
       </div>
 
-      {/* QRコード表示エリア */}
       {imageUrl && (
         <div style={{ marginTop: "20px", textAlign: "center" }}>
           <p>{selectedDate} のシフト表 (スマホで読み取って保存できます)</p>
